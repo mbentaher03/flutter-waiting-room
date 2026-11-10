@@ -105,9 +105,11 @@ class _WaitingRoomAppState extends State<WaitingRoomApp> {
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: ListTile(
-                            title: Text(client.name),
+                            title: Text(client['name'] ?? ''),
                             subtitle: Text(
-                              client.createdAt.toString().split('.')[0],
+                              client['lat'] == null
+                                  ? '📍 Location not captured'
+                                  : '📍 ${client['lat']?.toStringAsFixed(4)}, ${client['lng']?.toStringAsFixed(4)}',
                               style: const TextStyle(
                                 fontSize: 12, 
                                 color: Colors.grey,
@@ -117,7 +119,7 @@ class _WaitingRoomAppState extends State<WaitingRoomApp> {
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () {
                                 context.read<QueueProvider>()
-                                    .removeClient(client.id);
+                                    .removeClient(client['id']);
                               },
                             ),
                           ),
