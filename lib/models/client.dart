@@ -8,8 +8,10 @@ class Client {
   final double? lat;
   final double? lng;
   final double? locationAccuracy;
+  final DateTime? locationCapturedAt;
   final DateTime createdAt;
   final SyncStatus syncStatus;
+  final int? queueNumber;
 
   const Client({
     required this.id,
@@ -17,8 +19,10 @@ class Client {
     this.lat,
     this.lng,
     this.locationAccuracy,
+    this.locationCapturedAt,
     required this.createdAt,
     this.syncStatus = SyncStatus.synced,
+    this.queueNumber,
   });
 
   // ── Computed properties ──────────────────────────────────────────────────
@@ -42,6 +46,7 @@ class Client {
       'lat': lat,
       'lng': lng,
       'location_accuracy_m': locationAccuracy,
+      'location_captured_at': locationCapturedAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -54,7 +59,9 @@ class Client {
       'lat': lat,
       'lng': lng,
       'location_accuracy_m': locationAccuracy,
+      'location_captured_at': locationCapturedAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
+      'queue_number': queueNumber,
       'sync_status': syncStatus.name,
     };
   }
@@ -67,10 +74,12 @@ class Client {
       lat: (map['lat'] as num?)?.toDouble(),
       lng: (map['lng'] as num?)?.toDouble(),
       locationAccuracy: (map['location_accuracy_m'] as num?)?.toDouble(),
+      locationCapturedAt: DateTime.tryParse(map['location_captured_at']?.toString() ?? ''),
       createdAt: DateTime.parse(
         (map['created_at'] as String?) ?? DateTime.now().toIso8601String(),
       ),
       syncStatus: SyncStatus.synced,
+      queueNumber: (map['queue_number'] as num?)?.toInt(),
     );
   }
 
@@ -82,23 +91,27 @@ class Client {
       lat: (map['lat'] as num?)?.toDouble(),
       lng: (map['lng'] as num?)?.toDouble(),
       locationAccuracy: (map['location_accuracy_m'] as num?)?.toDouble(),
+      locationCapturedAt: DateTime.tryParse(map['location_captured_at']?.toString() ?? ''),
       createdAt: DateTime.parse(map['created_at'] as String),
       syncStatus: SyncStatus.values.firstWhere(
         (s) => s.name == (map['sync_status'] as String?),
         orElse: () => SyncStatus.pending,
       ),
+      queueNumber: (map['queue_number'] as num?)?.toInt(),
     );
   }
 
-  Client copyWith({SyncStatus? syncStatus}) {
+  Client copyWith({SyncStatus? syncStatus, int? queueNumber}) {
     return Client(
       id: id,
       name: name,
       lat: lat,
       lng: lng,
       locationAccuracy: locationAccuracy,
+      locationCapturedAt: locationCapturedAt,
       createdAt: createdAt,
       syncStatus: syncStatus ?? this.syncStatus,
+      queueNumber: queueNumber ?? this.queueNumber,
     );
   }
 

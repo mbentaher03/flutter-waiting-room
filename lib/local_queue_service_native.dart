@@ -23,10 +23,10 @@ class LocalQueueService {
   Future<Database> _initDB() async {
     await _initializeDatabaseFactory();
     if (_inMemory) {
-      return openDatabase(':memory:', version: 1, onCreate: _onCreate);
+      return openDatabase(':memory:', version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
     }
     final path = join(await getDatabasesPath(), 'waiting_room.db');
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(path, version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   Future<void> _initializeDatabaseFactory() {
@@ -43,10 +43,26 @@ class LocalQueueService {
         name TEXT NOT NULL,
         lat REAL,
         lng REAL,
+        location_accuracy_m REAL,
+        location_captured_at TEXT,
         created_at TEXT NOT NULL,
-        is_synced INTEGER NOT NULL DEFAULT 0
+        queue_number INTEGER,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        sync_status TEXT NOT NULL DEFAULT 'pending'
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE $tableName ADD COLUMN location_accuracy_m REAL');
+      await db.execute('ALTER TABLE $tableName ADD COLUMN location_captured_at TEXT');
+      await db.execute("ALTER TABLE $tableName ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
+      await db.execute("UPDATE $tableName SET sync_status = 'synced' WHERE is_synced = 1");
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE $tableName ADD COLUMN queue_number INTEGER');
+    }
   }
 
   // ── Insert / replace ──────────────────────────────────────────────────────
@@ -58,8 +74,12 @@ class LocalQueueService {
       'name': client['name'],
       'lat': client['lat'],
       'lng': client['lng'],
+      'location_accuracy_m': client['location_accuracy_m'],
+      'location_captured_at': client['location_captured_at'],
       'created_at': client['created_at'],
+      'queue_number': client['queue_number'],
       'is_synced': client['is_synced'] ?? 0,
+      'sync_status': client['sync_status'] ?? 'pending',
     };
     await db.insert(tableName, row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -79,8 +99,21 @@ class LocalQueueService {
   // ── Updates ───────────────────────────────────────────────────────────────
 
   Future<void> markClientAsSynced(String id) async {
+    await updateClientSyncStatus(id, 'synced');
+  }
+
+  Future<void> updateClientSyncStatus(String id, String status) async {
     final db = await database;
-    await db.update(tableName, {'is_synced': 1},
+    await db.update(tableName, {
+      'is_synced': status == 'synced' ? 1 : 0,
+      'sync_status': status,
+    },
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> updateClientQueueNumber(String id, int queueNumber) async {
+    final db = await database;
+    await db.update(tableName, {'queue_number': queueNumber},
         where: 'id = ?', whereArgs: [id]);
   }
 

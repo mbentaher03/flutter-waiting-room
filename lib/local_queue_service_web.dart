@@ -50,7 +50,7 @@ class LocalQueueService {
 
   Future<List<Map<String, dynamic>>> getUnsyncedClients() async {
     return _store
-        .where((c) => (c['is_synced'] as int?) != 1)
+        .where((c) => c['is_synced'] != 1)
         .map((c) => Map<String, dynamic>.from(c))
         .toList();
   }
@@ -58,9 +58,23 @@ class LocalQueueService {
   // ── Updates ───────────────────────────────────────────────────────────────
 
   Future<void> markClientAsSynced(String id) async {
+    await updateClientSyncStatus(id, 'synced');
+  }
+
+  Future<void> updateClientSyncStatus(String id, String status) async {
     final rows = _store;
     final idx = rows.indexWhere((c) => c['id'] == id);
-    if (idx != -1) rows[idx]['is_synced'] = 1;
+    if (idx != -1) {
+      rows[idx]['is_synced'] = status == 'synced' ? 1 : 0;
+      rows[idx]['sync_status'] = status;
+    }
+    _save(rows);
+  }
+
+  Future<void> updateClientQueueNumber(String id, int queueNumber) async {
+    final rows = _store;
+    final idx = rows.indexWhere((c) => c['id'] == id);
+    if (idx != -1) rows[idx]['queue_number'] = queueNumber;
     _save(rows);
   }
 

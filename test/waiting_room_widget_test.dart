@@ -1,85 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_application_1/main.dart';
 import 'package:flutter_application_1/queue_provider.dart';
+import 'package:flutter_application_1/screens/queue_screen.dart';
+import 'package:flutter_application_1/services/sync_service.dart';
+import 'package:flutter_application_1/providers/connectivity_provider.dart';
+import 'support/queue_fakes.dart';
+
 void main() {
-  testWidgets('should add a new client to the list on button tap',
-      (WidgetTester tester) async {
-    // ARRANGE
-     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (context) => QueueProvider(),
-          child: const WaitingRoomApp(),
-  ),
-);
+  testWidgets('offline registration appears separately from the official queue',
+      (tester) async {
+    final storage = MemoryQueueStorage();
+    final repository = MemoryQueueRepository();
+    final connectivity = makeTestConnectivity();
+    final queue = QueueProvider(
+      repository: repository,
+      storage: storage,
+      geolocation: FixedGeolocationService(),
+      connectivity: connectivity,
+      syncService: SyncService(storage, repository),
+    );
+    await queue.addClient('Alice');
 
-    // ACT
-    await tester.enterText(find.byType(TextField), 'Alice');
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pump();
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
+        ChangeNotifierProvider<QueueProvider>.value(value: queue),
+      ],
+      child: const MaterialApp(home: QueueScreen()),
+    ));
+    await tester.pumpAndSettle();
 
-    // ASSERT
     expect(find.text('Alice'), findsOneWidget);
-    expect(find.text('Clients in Queue: 1'), findsOneWidget);
+    expect(find.textContaining('not in the official queue'), findsOneWidget);
+    expect(find.text('The waiting queue is empty'), findsOneWidget);
+    queue.dispose();
+    connectivity.dispose();
   });
-    testWidgets('should remove a client from the list when the delete button is tapped',
-      (WidgetTester tester) async {
-    // ARRANGE
-    await tester.pumpWidget(
-  ChangeNotifierProvider(
-    create: (context) => QueueProvider(),
-    child: const WaitingRoomApp(),
-  ),
-);await tester.pumpWidget(
-  ChangeNotifierProvider(
-    create: (context) => QueueProvider(),
-    child: const WaitingRoomApp(),
-  ),
-);
-    await tester.enterText(find.byType(TextField), 'Bob');
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pump();
-
-    // ACT
-    await tester.tap(find.byIcon(Icons.delete));
-    await tester.pump();
-
-    // ASSERT
-    expect(find.text('Bob'), findsNothing);
-    expect(find.text('Clients in Queue: 0'), findsOneWidget);
-  });
-  
-  testWidgets(
-    'should remove the first client from the list when "Next Client" is tapped',
-    (WidgetTester tester) async {
-      // ARRANGE
-      await tester.pumpWidget(
-        ChangeNotifierProvider(
-          create: (context) => QueueProvider(),
-          child: const WaitingRoomApp(),
-        ),
-      );
-
-      // Add Client A
-      await tester.enterText(find.byType(TextField), 'Client A');
-      await tester.tap(find.byType(ElevatedButton));
-      await tester.pump();
-
-      // Add Client B
-      await tester.enterText(find.byType(TextField), 'Client B');
-      await tester.tap(find.byType(ElevatedButton));
-      await tester.pump();
-
-      // ACT
-      await tester.tap(find.byKey(const Key('nextClientButton')));
-      await tester.pump();
-
-      // ASSERT
-      expect(find.text('Client A'), findsNothing);
-      expect(find.text('Client B'), findsOneWidget);
-      expect(find.text('Clients in Queue: 1'), findsOneWidget);
-    },
-  );
-
 }

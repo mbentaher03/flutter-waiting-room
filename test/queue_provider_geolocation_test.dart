@@ -1,78 +1,64 @@
-// test/queue_provider_geolocation_test.dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:flutter_application_1/geolocation_service.dart';
-import 'package:flutter_application_1/local_queue_service.dart';
+import 'package:flutter_application_1/models/sync_status.dart';
 import 'package:flutter_application_1/queue_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_application_1/services/sync_service.dart';
+import 'support/queue_fakes.dart';
 
-import 'queue_provider_geolocation_test.mocks.dart';
-
-@GenerateMocks([GeolocationService, SupabaseClient])
 void main() {
-  setUpAll(() {
-    // Use in-memory database for tests
-    databaseFactory = databaseFactoryFfi;
-  });
-
-  test('addClient saves client with geolocation', () async {
-    final mockGeo = MockGeolocationService();
-    final mockPos = Position(
+  test('registration stores optional coordinates and accuracy locally', () async {
+    final position = Position(
       latitude: 37.7749,
       longitude: -122.4194,
-      timestamp: DateTime.now(),
-      accuracy: 5.0,
-      altitude: 0.0,
-      altitudeAccuracy: 0.0,
-      heading: 0.0,
-      headingAccuracy: 0.0,
-      speed: 0.0,
-      speedAccuracy: 0.0,
+      timestamp: DateTime.utc(2026),
+      accuracy: 5,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
     );
-
-    when(mockGeo.getCurrentPosition()).thenAnswer((_) async => mockPos);
-
-    // Use a mock SupabaseClient and in-memory local DB
-    final mockSupabase = MockSupabaseClient();
-    final localDb = LocalQueueService(inMemory: true);
-
-    final provider = QueueProvider.forTesting(
-      mockSupabase,
-      localDb: localDb,
-      geoService: mockGeo,
+    final storage = MemoryQueueStorage();
+    final repository = MemoryQueueRepository();
+    final connectivity = makeTestConnectivity();
+    final provider = QueueProvider(
+      repository: repository,
+      storage: storage,
+      geolocation: FixedGeolocationService(position),
+      connectivity: connectivity,
+      syncService: SyncService(storage, repository),
     );
 
     await provider.addClient('Test User');
 
-    final client = provider.clients.last;
-    expect(client['lat'], 37.7749);
-    expect(client['lng'], -122.4194);
-    expect(client['name'], 'Test User');
-
-    verify(mockGeo.getCurrentPosition()).called(1);
+    final client = provider.pendingClients.single;
+    expect(client.lat, 37.7749);
+    expect(client.lng, -122.4194);
+    expect(client.locationAccuracy, 5);
+    expect(client.syncStatus, SyncStatus.pending);
+    expect(provider.clients, isEmpty);
+    provider.dispose();
+    connectivity.dispose();
   });
 
-  test('addClient saves null location when geolocation fails', () async {
-    final mockGeo = MockGeolocationService();
-    when(mockGeo.getCurrentPosition()).thenAnswer((_) async => null);
-
-    final mockSupabase = MockSupabaseClient();
-    final localDb = LocalQueueService(inMemory: true);
-
-    final provider = QueueProvider.forTesting(
-      mockSupabase,
-      localDb: localDb,
-      geoService: mockGeo,
+  test('registration succeeds when location permission is unavailable', () async {
+    final storage = MemoryQueueStorage();
+    final repository = MemoryQueueRepository();
+    final connectivity = makeTestConnectivity();
+    final provider = QueueProvider(
+      repository: repository,
+      storage: storage,
+      geolocation: FixedGeolocationService(),
+      connectivity: connectivity,
+      syncService: SyncService(storage, repository),
     );
 
-    await provider.addClient('No Location User');
+    await provider.addClient('No GPS User');
 
-    final client = provider.clients.last;
-    expect(client['lat'], isNull);
-    expect(client['lng'], isNull);
-    expect(client['name'], 'No Location User');
+    expect(provider.pendingClients.single.name, 'No GPS User');
+    expect(provider.pendingClients.single.hasLocation, isFalse);
+    provider.dispose();
+    connectivity.dispose();
   });
 }
