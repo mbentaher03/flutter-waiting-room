@@ -12,6 +12,8 @@ class Client {
   final DateTime createdAt;
   final SyncStatus syncStatus;
   final int? queueNumber;
+  /// Local account that created an offline registration; not sent to Supabase.
+  final String? ownerId;
 
   const Client({
     required this.id,
@@ -23,6 +25,7 @@ class Client {
     required this.createdAt,
     this.syncStatus = SyncStatus.synced,
     this.queueNumber,
+    this.ownerId,
   });
 
   // ── Computed properties ──────────────────────────────────────────────────
@@ -63,6 +66,7 @@ class Client {
       'created_at': createdAt.toIso8601String(),
       'queue_number': queueNumber,
       'sync_status': syncStatus.name,
+      'owner_id': ownerId,
     };
   }
 
@@ -80,6 +84,7 @@ class Client {
       ),
       syncStatus: SyncStatus.synced,
       queueNumber: (map['queue_number'] as num?)?.toInt(),
+      ownerId: map['owner_id'] as String?,
     );
   }
 
@@ -98,6 +103,7 @@ class Client {
         orElse: () => SyncStatus.pending,
       ),
       queueNumber: (map['queue_number'] as num?)?.toInt(),
+      ownerId: map['owner_id'] as String?,
     );
   }
 
@@ -112,6 +118,7 @@ class Client {
       createdAt: createdAt,
       syncStatus: syncStatus ?? this.syncStatus,
       queueNumber: queueNumber ?? this.queueNumber,
+      ownerId: ownerId,
     );
   }
 

@@ -54,6 +54,12 @@ class _CountingRepository implements QueueRepository {
   Future<List<Client>> fetchPage({required int offset, required int limit}) async => [];
 
   @override
+  Future<void> deleteQueueClient(String id) async {}
+
+  @override
+  Future<String?> callNextClient() async => null;
+
+  @override
   RealtimeChannel subscribe(
     void Function(Client) onInsert,
     void Function(String) onDelete,

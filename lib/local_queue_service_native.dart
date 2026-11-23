@@ -23,10 +23,10 @@ class LocalQueueService {
   Future<Database> _initDB() async {
     await _initializeDatabaseFactory();
     if (_inMemory) {
-      return openDatabase(':memory:', version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
+      return openDatabase(':memory:', version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
     }
     final path = join(await getDatabasesPath(), 'waiting_room.db');
-    return openDatabase(path, version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   Future<void> _initializeDatabaseFactory() {
@@ -47,6 +47,7 @@ class LocalQueueService {
         location_captured_at TEXT,
         created_at TEXT NOT NULL,
         queue_number INTEGER,
+        owner_id TEXT,
         is_synced INTEGER NOT NULL DEFAULT 0,
         sync_status TEXT NOT NULL DEFAULT 'pending'
       )
@@ -63,6 +64,9 @@ class LocalQueueService {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE $tableName ADD COLUMN queue_number INTEGER');
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE $tableName ADD COLUMN owner_id TEXT');
+    }
   }
 
   // ── Insert / replace ──────────────────────────────────────────────────────
@@ -78,6 +82,7 @@ class LocalQueueService {
       'location_captured_at': client['location_captured_at'],
       'created_at': client['created_at'],
       'queue_number': client['queue_number'],
+      'owner_id': client['owner_id'],
       'is_synced': client['is_synced'] ?? 0,
       'sync_status': client['sync_status'] ?? 'pending',
     };

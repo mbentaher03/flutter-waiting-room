@@ -5,8 +5,9 @@ import '../models/sync_status.dart';
 
 class ClientCard extends StatelessWidget {
   final Client client;
+  final VoidCallback? onDelete;
 
-  const ClientCard({super.key, required this.client});
+  const ClientCard({super.key, required this.client, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -24,10 +25,18 @@ class ClientCard extends StatelessWidget {
             : client.hasLocation
                 ? 'Location context captured'
                 : 'Location not captured'),
-        trailing: Icon(
-          pending ? Icons.cloud_upload_outlined : Icons.check_circle_outline,
-          color: pending ? Colors.orange : Colors.green,
-        ),
+        trailing: onDelete != null
+            ? IconButton(
+                tooltip: 'Remove client from queue',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+              )
+            : Icon(
+                pending
+                    ? Icons.cloud_upload_outlined
+                    : Icons.check_circle_outline,
+                color: pending ? Colors.orange : Colors.green,
+              ),
       ),
     );
   }
