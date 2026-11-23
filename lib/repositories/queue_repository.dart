@@ -5,6 +5,8 @@ import '../models/client.dart';
 abstract interface class QueueRepository {
   Future<int> registerOnServer(Client client);
   Future<List<Client>> fetchPage({required int offset, required int limit});
+  Future<void> deleteQueueClient(String id);
+  Future<String?> callNextClient();
   RealtimeChannel subscribe(void Function(Client client) onInsert,
       void Function(String id) onDelete);
   Future<void> unsubscribe(RealtimeChannel channel);
@@ -46,6 +48,17 @@ class SupabaseQueueRepository implements QueueRepository {
     return rows
         .map((row) => Client.fromSupabaseMap(Map<String, dynamic>.from(row)))
         .toList();
+  }
+
+  @override
+  Future<void> deleteQueueClient(String id) async {
+    await _client.rpc('admin_delete_queue_client', params: {'p_client_id': id});
+  }
+
+  @override
+  Future<String?> callNextClient() async {
+    final result = await _client.rpc('admin_call_next_client');
+    return result?.toString();
   }
 
   @override

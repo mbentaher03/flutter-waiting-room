@@ -32,6 +32,7 @@ class QueueProvider extends ChangeNotifier {
   bool _isLoadingMore = false;
   bool _disposed = false;
   RealtimeChannel? _channel;
+  String? _activeUserId;
 
   QueueProvider({
     required QueueRepository repository,
@@ -53,7 +54,9 @@ class QueueProvider extends ChangeNotifier {
       );
   /// Offline or retrying registrations are shown separately from the official queue.
   List<Client> get pendingClients => List.unmodifiable(
-        _clients.where((client) => client.syncStatus != SyncStatus.synced),
+        _clients.where((client) =>
+            client.syncStatus != SyncStatus.synced &&
+            (_activeUserId == null || client.ownerId == _activeUserId)),
       );
   QueueState get state => _state;
   String? get errorMessage => _errorMessage;
@@ -61,11 +64,30 @@ class QueueProvider extends ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   AppConnectivity get connectivity => _connectivity.status;
 
+  void activateUser(String userId) {
+    _activeUserId = userId;
+    _clients.removeWhere((client) =>
+        client.syncStatus != SyncStatus.synced && client.ownerId != userId);
+    _notify();
+  }
+
+  void deactivateUser() {
+    _activeUserId = null;
+    _clients.removeWhere((client) => client.syncStatus != SyncStatus.synced);
+    final channel = _channel;
+    _channel = null;
+    if (channel != null) unawaited(_repository.unsubscribe(channel));
+    _notify();
+  }
+
   Future<void> initialize() async {
     _state = QueueState.loading;
     _notify();
     try {
       _replaceClients(await _storage.getAllClients());
+      _clients.removeWhere((client) =>
+          client.syncStatus != SyncStatus.synced &&
+          _activeUserId != null && client.ownerId != _activeUserId);
       if (_clients.isNotEmpty) _state = QueueState.loaded;
       _notify();
       if (_connectivity.status == AppConnectivity.online) {
@@ -143,7 +165,7 @@ class QueueProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addClient(String name) async {
+  Future<void> addClient(String name, {String? ownerId}) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       _errorMessage = 'Enter a name to join the queue.';
@@ -166,6 +188,7 @@ class QueueProvider extends ChangeNotifier {
       locationCapturedAt: position?.timestamp.toUtc(),
       createdAt: now,
       syncStatus: SyncStatus.pending,
+      ownerId: ownerId ?? _activeUserId,
     );
     try {
       await _storage.saveClient(client);
@@ -185,8 +208,37 @@ class QueueProvider extends ChangeNotifier {
 
   Future<void> refresh() => fetchInitialQueue(showRefreshing: true);
 
+  Future<void> adminDeleteClient(String id) async {
+    try {
+      await _repository.deleteQueueClient(id);
+      _onRealtimeDelete(id);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = 'Could not remove this client. Check admin access and retry.';
+      debugPrint('Admin queue deletion failed: $e');
+      _notify();
+      rethrow;
+    }
+  }
+
+  Future<String?> adminCallNextClient() async {
+    try {
+      final id = await _repository.callNextClient();
+      if (id != null) _onRealtimeDelete(id);
+      _errorMessage = null;
+      return id;
+    } catch (e) {
+      _errorMessage = 'Could not call the next client. Check admin access and retry.';
+      debugPrint('Admin call-next failed: $e');
+      _notify();
+      rethrow;
+    }
+  }
+
   Future<void> _syncAndFetch() async {
-    final assignedNumbers = await _sync.synchronize();
+    final userId = _activeUserId;
+    if (userId == null) return;
+    final assignedNumbers = await _sync.synchronize(userId: userId);
     for (var i = 0; i < _clients.length; i++) {
       final number = assignedNumbers[_clients[i].id];
       if (number != null) {
@@ -208,7 +260,9 @@ class QueueProvider extends ChangeNotifier {
           // Coordinates remain private to the registering device. The public
           // queue fetch intentionally never selects the location columns.
         ),
-      ..._clients.where((client) => client.syncStatus != SyncStatus.synced),
+      ..._clients.where((client) =>
+          client.syncStatus != SyncStatus.synced &&
+          (_activeUserId == null || client.ownerId == _activeUserId)),
     ].map((server) {
       final local = localById[server.id];
       if (local == null || server.syncStatus != SyncStatus.synced) return server;
@@ -290,7 +344,8 @@ class QueueProvider extends ChangeNotifier {
   }
 
   void _onConnectivityChanged() {
-    if (_connectivity.status == AppConnectivity.online) {
+    if (_connectivity.status == AppConnectivity.online &&
+        _activeUserId != null) {
       unawaited(_syncAndFetch().then((_) => _startRealtime()).catchError((Object e) {
         _errorMessage = 'Could not synchronize the queue yet.';
         debugPrint('Connectivity recovery sync failed: $e');

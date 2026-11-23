@@ -71,6 +71,21 @@ class MemoryQueueRepository implements QueueRepository {
       official.skip(offset).take(limit).toList();
 
   @override
+  Future<void> deleteQueueClient(String id) async {
+    official.removeWhere((client) => client.id == id);
+    deleteListener?.call(id);
+  }
+
+  @override
+  Future<String?> callNextClient() async {
+    if (official.isEmpty) return null;
+    official.sort((a, b) => a.queueNumber!.compareTo(b.queueNumber!));
+    final id = official.removeAt(0).id;
+    deleteListener?.call(id);
+    return id;
+  }
+
+  @override
   RealtimeChannel subscribe(
     void Function(Client) onInsert,
     void Function(String) onDelete,

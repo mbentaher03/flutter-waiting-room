@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'providers/connectivity_provider.dart';
+import 'providers/auth_provider.dart';
 import 'queue_provider.dart';
 import 'repositories/queue_repository.dart';
-import 'screens/queue_screen.dart';
+import 'screens/account_gate.dart';
 import 'services/connectivity_service.dart';
 import 'services/geolocation_service.dart';
 import 'services/sync_service.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
   final repository = SupabaseQueueRepository(supabase);
   final connectivity =
       ConnectivityProvider(ConnectivityService(supabase));
+  final auth = AuthProvider(supabase);
   final queue = QueueProvider(
     repository: repository,
     storage: storage,
@@ -35,13 +37,13 @@ Future<void> main() async {
     connectivity: connectivity,
     syncService: SyncService(storage, repository),
   );
-  unawaited(connectivity.initialize());
-  unawaited(queue.initialize());
+  unawaited(auth.initialize());
 
   runApp(MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: connectivity),
       ChangeNotifierProvider.value(value: queue),
+      ChangeNotifierProvider.value(value: auth),
     ],
     child: const WaitingRoomApp(),
   ));
@@ -57,6 +59,6 @@ class WaitingRoomApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const QueueScreen(),
+        home: const AccountGate(),
       );
 }

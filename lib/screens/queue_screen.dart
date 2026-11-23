@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/queue_state.dart';
+import '../providers/auth_provider.dart';
 import '../providers/connectivity_provider.dart';
 import '../queue_provider.dart';
 import '../widgets/client_card.dart';
+import '../widgets/admin_approval_panel.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/queue_empty_widget.dart';
@@ -17,13 +19,23 @@ class QueueScreen extends StatefulWidget {
 }
 
 class _QueueScreenState extends State<QueueScreen> {
+  late final QueueProvider _queue;
   final _nameController = TextEditingController();
   final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _queue = context.read<QueueProvider>();
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final userId = context.read<AuthProvider>().user?.id;
+      if (userId == null) return;
+      context.read<QueueProvider>().activateUser(userId);
+      context.read<ConnectivityProvider>().initialize();
+      context.read<QueueProvider>().initialize();
+    });
   }
 
   void _onScroll() {
@@ -36,11 +48,53 @@ class _QueueScreenState extends State<QueueScreen> {
   void _addClient() {
     final name = _nameController.text;
     _nameController.clear();
-    context.read<QueueProvider>().addClient(name);
+    final userId = context.read<AuthProvider>().user?.id;
+    context.read<QueueProvider>().addClient(name, ownerId: userId);
+  }
+
+  Future<void> _deleteClient(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove this client?'),
+        content: const Text('This permanently removes the client from the shared queue.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<QueueProvider>().adminDeleteClient(id);
+    } catch (_) {
+      // QueueProvider provides the visible error message.
+    }
+  }
+
+  Future<void> _callNext() async {
+    try {
+      final id = await context.read<QueueProvider>().adminCallNextClient();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(id == null
+            ? 'The queue is empty.'
+            : 'Next client called and removed from the queue.'),
+      ));
+    } catch (_) {
+      // QueueProvider provides the visible error message.
+    }
   }
 
   @override
   void dispose() {
+    _queue.deactivateUser();
     _nameController.dispose();
     _scrollController
       ..removeListener(_onScroll)
@@ -50,11 +104,30 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Waiting Room'), centerTitle: true),
+        appBar: AppBar(
+          title: const Text('Waiting Room'),
+          centerTitle: true,
+          actions: [
+            Consumer<AuthProvider>(builder: (context, auth, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Sign out',
+                      onPressed: auth.isBusy ? null : auth.signOut,
+                      icon: const Icon(Icons.logout),
+                    ),
+                  ],
+                )),
+          ],
+        ),
         body: Column(children: [
           Consumer<ConnectivityProvider>(
             builder: (_, provider, __) => OfflineBanner(status: provider.status),
           ),
+          Consumer<AuthProvider>(builder: (context, auth, _) {
+            if (!auth.isAdmin) return const SizedBox.shrink();
+            return const AdminApprovalPanel();
+          }),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
@@ -148,12 +221,32 @@ class _QueueScreenState extends State<QueueScreen> {
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
-                    return ClientCard(client: provider.clients[index]);
+                    return Consumer<AuthProvider>(
+                      builder: (context, auth, _) => ClientCard(
+                        client: provider.clients[index],
+                        onDelete: auth.isAdmin
+                            ? () => _deleteClient(provider.clients[index].id)
+                            : null,
+                      ),
+                    );
                   },
                 ),
               );
             }),
           ),
+          Consumer<AuthProvider>(builder: (context, auth, _) {
+            if (!auth.isAdmin) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _callNext,
+                  child: const Text('Call next client'),
+                ),
+              ),
+            );
+          }),
         ]),
       );
 }

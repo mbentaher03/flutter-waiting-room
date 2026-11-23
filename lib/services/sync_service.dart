@@ -10,12 +10,13 @@ class SyncService {
 
   SyncService(this._storage, this._repository);
 
-  Future<Map<String, int>> synchronize() async {
+  Future<Map<String, int>> synchronize({String? userId}) async {
     if (_isSyncing) return const {};
     final numbers = <String, int>{};
     _isSyncing = true;
     try {
       for (final pending in await _storage.getPendingClients()) {
+        if (userId != null && pending.ownerId != userId) continue;
         try {
           await _storage.updateSyncStatus(pending.id, SyncStatus.syncing);
           final queueNumber = await _repository.registerOnServer(pending);

@@ -1,6 +1,6 @@
 # flutter_application_1
 
-## Workshop 6 setup
+## Waiting Room setup
 
 The app uses one shared waiting queue. Offline registrations are saved locally
 with a pending status and are not shown as official queue entries until
@@ -11,14 +11,41 @@ stored for synchronization but omitted from queue reads and Realtime messages.
 
 1. Open the project's Supabase Dashboard and select **SQL Editor**.
 2. Select **New query**.
-3. Open `supabase/migrations/202611230002_resilient_queue.sql` in this project,
-   copy the full contents into the SQL Editor, and run it.
-4. Confirm `public.clients.id` is `uuid`, plus the location, `queue_number`,
-   and timestamp columns added by the migration. Flutter represents UUIDs as
-   strings and PostgREST passes them to the RPC's UUID parameter.
-5. Restart the Flutter app. The migration adds a registration RPC, queue-number
-   sequence, safe public-field grants, and a Realtime trigger that broadcasts
-   only queue fields.
+3. If not already applied, run `supabase/migrations/202611230002_resilient_queue.sql`.
+4. Run `supabase/migrations/202611230003_user_approval_and_admin.sql`.
+5. Confirm `public.clients.id` is `uuid`. The account migration creates
+   `public.profiles`, account approval and role controls, and admin-only queue
+   deletion/call-next functions. Anonymous queue access is disabled.
+6. Run `supabase/migrations/202611230004_admin_signup_allowlist.sql` if it has
+   not already been applied, then run
+   `supabase/migrations/202611230005_username_accounts.sql`. In **Authentication
+   → Providers → Email**, disable email confirmations: the app asks for a
+   username and password, and does not ask users for an email address.
+7. To pre-authorize an administrator before signup, add the trusted username
+   in Supabase SQL Editor before that account is created:
+
+   ```sql
+   insert into public.admin_signup_allowlist (username)
+   values (lower('admin_username'));
+   ```
+
+   The signup trigger consumes this one-time allowlist entry and creates an
+   approved admin profile. If an account already exists as pending, promote
+   its profile once in SQL by username:
+
+   ```sql
+   update public.profiles
+   set role = 'admin', approved = true, rejected = false
+   where lower(username) = lower('admin_username');
+   ```
+
+   For an account created before username login was added, its profile username
+   is backfilled from the email's first part. In **Authentication → Users**, set
+   its internal Auth email to `<username>@waiting-room.invalid`; its password
+   remains the one already chosen. Users do not enter or see this address in
+   the app. Sign out and sign back in after applying database changes. Admins
+   can approve/decline accounts, assign `user` or `admin` roles, remove queue
+   entries, and call the next client. Regular users can join after approval.
 
 Do not paste a Supabase `service_role` key into the Flutter app. The app uses
 the public/anon key from `.env`; the registration RPC is the write boundary.

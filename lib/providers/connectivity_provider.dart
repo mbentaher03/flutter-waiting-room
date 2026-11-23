@@ -14,6 +14,7 @@ class ConnectivityProvider extends ChangeNotifier {
   bool _checkingBackend = false;
   bool _checkAgain = false;
   bool _disposed = false;
+  bool _initialized = false;
 
   ConnectivityProvider(
     this._service, {
@@ -24,6 +25,8 @@ class ConnectivityProvider extends ChangeNotifier {
   bool get isOnline => _status == AppConnectivity.online;
 
   Future<void> initialize() async {
+    if (_initialized || _disposed) return;
+    _initialized = true;
     _subscription = _service.networkChanges.listen(
       _handleNetworkChange,
       onError: (_) => _setStatus(AppConnectivity.checking),
